@@ -50,6 +50,7 @@ class HelloFS(Fuse):
         self.inodes = defaultdict(list)
         self.set_datablocks()
         self.set_inodes()
+#        self.generate_list(self.block_count())      # Calculating number of blocks
         self.generate_list(total_inodes)      # Calculating number of blocks
 
     def getattr(self, path):
@@ -61,7 +62,7 @@ class HelloFS(Fuse):
         elif path[1:] in blist:
             st.st_mode = stat.S_IFREG | 0640   # Giving all permissions
             st.st_nlink = 1
-            st.st_size = 8096                  # pros and cons?
+            st.st_size = 1024
         else:
             return -errno.ENOENT
         return st
@@ -83,17 +84,16 @@ class HelloFS(Fuse):
 
     def read(self, path, size, offset):
         print("in read")
-        
-        buf = ""
+        print("offset: {0}").format(offset)
+        print("size: {0}").format(size)
+        buf = ''
         if path[1:] not in blist:
             return -errno.ENOENT
                 
         blk_list = self.lookup_inode(path)
-        
         for block in blk_list:
-            if self.datablocks[block] == '':
-                break
-            buf = buf + self.datablocks[block]        #combining the data of all the eight blocks   ?? wrong
+            buf += self.datablocks[block]        #combining the data of all the eight blocks   ?? wrong
+            print("buf in read: {0}").format(buf)
             
         return buf
 
@@ -102,19 +102,16 @@ class HelloFS(Fuse):
 
     def write(self, path, buf, offset):
         print("in write")
-        
+        print("buf: {0}").format(buf)
         data_size = len(buf)
-        
-        chunks    = int(math.ceil(float(data_size)/float(blk_size)))
+        chunks    = math.ceil(data_size/blk_size)
         
         blk_list = self.lookup_inode(path)
-        
-        for i in range(0, chunks):
+        for i in range(0, int(chunks)):
             offset = i*1024
             self.datablocks[blk_list[i]] = buf[offset:offset+1023]
-            
-        print(self.datablocks[blk_list[0]])
-        print(self.datablocks[blk_list[1]])
+        #self.datablocks[int(path[1:])] = buf
+        #self.write_to_logfile(path, buf)
         return len(buf)
 
     def chmod(self, path, mode):
