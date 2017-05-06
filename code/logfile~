@@ -1,1 +1,138 @@
-Hello
+This paper presents a new technique for disk storage management
+called a log-structured
+file
+system, A log-structured
+file system writes all modifications
+to disk sequentially
+in a log-like
+structure, thereby speeding up both file writing and crash recovery. The log is the only structure
+on disk; it contains indexing information
+so that files can be read back from the log efficiently.
+In order to maintain large free areas on disk for fast writing, we divide the log into segments and
+from heavily fragmented
+segments. We
+use a segment cleaner to compress the live information
+present a series of simulations
+that demonstrate the efficiency of a simple cleaning policy based
+on cost and benefit. We have implemented
+a prototype logstructured
+file system called Sprite
+LFS; it outperforms
+current Unix file systems by an order of magnitude
+for small-file
+writes
+while matching
+or exceeding Unix performance
+for reads and large writes. Even when the
+overhead for cleaning is included, Sprite LFS can use 70% of the disk bandwidth
+for writing,
+whereas Unix file systems typically
+can use only 5 – 10%.
+Systems]: Storage Management–aUoc-
+Categories and Subject Descriptors: D 4.2 [Operating
+strategies;
+secondary
+storage; D 4.3 [Operating
+Systems]: File Systems Man-
+ation / deallocation
+organization,
+du-ectory
+structures,
+access methods;
+D.4. 5 [Operating
+Systems]:
+agement—file
+measurements,
+sim-
+Reliability—checkpoint
+/restart; D.4.8 [Operating
+Systems]: Performance–
+ulation,
+operatzon
+anatysis;
+H. 2.2 [Database
+Management]:
+Physical Design— recouery and
+restart;
+H. 3 2 [Information
+Systems]: Information
+Storage —file organization
+General
+Terms: Algorithms,
+Design,
+Measurement,
+Performance
+Additional
+Key Words and Phrases: Disk storage management,
+organization,
+file system performance, high write performance,
+fast crash recovery, file system
+logging, log-structured,
+Unix
+1. INTRODUCTION
+Over
+the
+last
+access times
+decade
+have
+CPU
+only
+the future and it will
+To lessen the
+speeds
+improved
+cause more
+impact
+of this
+have
+slowly.
+This
+and more
+problem,
+increased
+dramatically
+trend
+is likely
+applications
+we have
+devised
+while
+disk
+to continue
+to become
+a new
+in
+disk-bound.
+disk
+storage
+The work described here was supported m part by the National Science Foundation under grant
+CCR-8900029, and in part by the National
+Aeronautics
+and Space Administration
+and the
+Defense Advanced Research Prolects Agency under contract NAG2-591.
+Authors’
+addresses: J. Ousterhoust,
+Computer
+Science Division,
+Electrical
+Engineering
+and
+Computer Sciences, University
+of California,
+Berkeley, CA 94720; M. Rosenblum,
+Computer
+Science Department,
+Stanford University,
+Stanford, CA 94305.
+Permission to copy without fee all or part of this material is granted provided that the copies are
+not made or distributed
+for direct commercial advantage, the ACM copyright notice and the title
+of the publication
+and its date appear, and notice is given that copying is by permission of the
+Association for Computing Machinery.
+To copy otherwise, or to republish, requires a fee and/or
+specific permission.
+@ 1992 ACM 0734-2071/92/0200-0026
+$01.50

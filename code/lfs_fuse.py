@@ -45,6 +45,7 @@ class HelloFS(Fuse):
 
     def __init__(self, *args, **kw):
         Fuse.__init__(self, *args, **kw)
+        self.data = dict()
         self.generate_list(self.block_count())      # Calculating number of blocks
         print("HelloFS init, {0} , {1}", args, kw)
 
@@ -83,20 +84,19 @@ class HelloFS(Fuse):
         print("in read")
         print("offset: {0}").format(offset)
         print("size: {0}").format(size)
+
         if path[1:] not in blist:
             return -errno.ENOENT
-        offset = int(path[1:])*1024
-
-        with open("/home/rubab/Fuse/code/logfile") as content:
-            buf = content.read()
-            buf = buf[offset:offset+1023]  #for handling unwanted characters that offset wali thing
+                
+        buf = self.data[int(path[1:])]        #reading just the value of hash by giving file number as key
+            
         return buf
 
     def unlink(self, path):
         print("in unlink")
 
     def write(self, path):
-        
+        print("in write")
 
     ## Helper Methods
 
@@ -104,7 +104,8 @@ class HelloFS(Fuse):
         count = 0
         with open("/home/rubab/Fuse/code/logfile") as log:
             for chunk in iter(lambda: log.read(1024), ''):
-                count += 1  #maybe make a dictionary of this
+                self.data[count] = chunk      #creating a dictionary of filename/filenumber and corresponding content              
+                count += 1  
         return count
             
     def generate_list(self, count):
