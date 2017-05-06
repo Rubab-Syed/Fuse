@@ -26,6 +26,7 @@ hello_path = '/hello'
 hello_str  = 'Hello World!\n'
 file1      = '/1'
 file1_str  = 'Hakooooooooooooooooonaaaaaaaaaaaa Matataaaaaaaaaaaaaaaaaa\n'
+blist      = ['.', '..']
 
 class MyStat(fuse.Stat):
     def __init__(self):
@@ -44,6 +45,7 @@ class HelloFS(Fuse):
 
     def __init__(self, *args, **kw):
         Fuse.__init__(self, *args, **kw)
+        self.generate_list(self.block_count())      # Calculating number of blocks
         print("HelloFS init, {0} , {1}", args, kw)
 
     def getattr(self, path):
@@ -52,16 +54,11 @@ class HelloFS(Fuse):
         if path == '/':
             st.st_mode = stat.S_IFDIR | 0755
             st.st_nlink = 2
-        elif path == hello_path:
-            st.st_mode = stat.S_IFREG | 0444
-            st.st_nlink = 1
-            st.st_size = len(hello_str)
-        elif path[1:] in ['1', '2', '3', '4']:
+        elif path[1:] in blist:
             st.st_mode = stat.S_IFREG | 0444
             st.st_nlink = 1
             st.st_size = 1024
         else:
-            print("going to return error")
             return -errno.ENOENT
         print("st:ouput of getattr")
         print(st)
@@ -70,39 +67,36 @@ class HelloFS(Fuse):
     def readdir(self, path, offset):
         print("in readdir")
         print("offset: {0}").format(offset)
-        blocks = self.block_count();
-        print(blocks)
-        for r in  '.', '..', '1', '2', '3', '4', hello_path[1:]:
-            yield fuse.Direntry(r)
 
-        #for r in range(1, (blocks+1)): 
-        #    yield fuse.Direntry(r)
+        for r in  blist:
+            yield fuse.Direntry(r)
 
     def open(self, path, flags):
         print("in open")
-        if path not in [hello_path, '/1', '/2', '/3', '/4']:
+        if path[1:] not in blist:
             return -errno.ENOENT
         accmode = os.O_RDONLY | os.O_WRONLY | os.O_RDWR
-        if (flags & accmode) != os.O_RDONLY:
+        if (flags & accmode) != os.O_RDONLY:  #Catering write?
             return -errno.EACCES
 
     def read(self, path, size, offset):
         print("in read")
         print("offset: {0}").format(offset)
         print("size: {0}").format(size)
-        if path not in [hello_path, '/1', '/2', '/3', '/4']:
+        if path[1:] not in blist:
             return -errno.ENOENT
-        slen = len(hello_str)
-        if offset < slen:
-            if offset + size > slen:
-                size = slen - offset
-            buf = hello_str[offset:offset+size]
-        else:
-            buf = ''
+        offset = int(path[1:])*1024
+
+        with open("/home/rubab/Fuse/code/logfile") as content:
+            buf = content.read()
+            buf = buf[offset:offset+1023]  #for handling unwanted characters that offset wali thing
         return buf
 
     def unlink(self, path):
         print("in unlink")
+
+    def write(self, path):
+        
 
     ## Helper Methods
 
@@ -113,6 +107,11 @@ class HelloFS(Fuse):
                 count += 1  #maybe make a dictionary of this
         return count
             
+    def generate_list(self, count):
+        for i in range(0, count):
+            blist.append(str(i))
+        return blist
+
 
 def main():
     print("in main")
