@@ -15,6 +15,7 @@ except ImportError:
 import fuse
 from fuse import Fuse
 from functools import partial
+from collections import defaultdict
 
 if not hasattr(fuse, '__version__'):
     raise RuntimeError, \
@@ -27,6 +28,8 @@ hello_str  = 'Hello World!\n'
 file1      = '/1'
 file1_str  = 'Hakooooooooooooooooonaaaaaaaaaaaa Matataaaaaaaaaaaaaaaaaa\n'
 blist      = ['.', '..']
+total_inodes     = 1024
+
 
 class MyStat(fuse.Stat):
     def __init__(self):
@@ -45,8 +48,12 @@ class HelloFS(Fuse):
 
     def __init__(self, *args, **kw):
         Fuse.__init__(self, *args, **kw)
-        self.data = dict()
-        self.generate_list(self.block_count())      # Calculating number of blocks
+        self.datablocks   = {}
+        self.inodes = defaultdict(list)
+        self.set_datablocks()
+        self.set_inodes()
+#        self.generate_list(self.block_count())      # Calculating number of blocks
+        self.generate_list(total_inodes)      # Calculating number of blocks
 
     def getattr(self, path):
         print("getattr being called, path{0}").format(path)
@@ -57,15 +64,15 @@ class HelloFS(Fuse):
         elif path[1:] in blist:
             st.st_mode = stat.S_IFREG | 0640   # Giving all permissions
             st.st_nlink = 1
-            st.st_size = 1024
+            st.st_size = 0
         else:
             return -errno.ENOENT
         return st
 
     def readdir(self, path, offset):
         print("in readdir")
-        print("offset: {0}").format(offset)
-
+        print("offset: {0}").format(blist)
+        
         for r in  blist:
             yield fuse.Direntry(r)
 
@@ -81,11 +88,13 @@ class HelloFS(Fuse):
         print("in read")
         print("offset: {0}").format(offset)
         print("size: {0}").format(size)
-
+        buf = ''
         if path[1:] not in blist:
             return -errno.ENOENT
                 
-        buf = self.data[int(path[1:])]        #reading just the value of hash by giving file number as key
+        blk_list = self.lookup_inode(path)
+        for block in blk_list:
+            buf += self.datablocks[block]        #combining the data of all the eight blocks
             
         return buf
 
@@ -96,6 +105,7 @@ class HelloFS(Fuse):
         print("in write")
         print("buf: {0}").format(buf)
         self.data[int(path[1:])] = buf
+        #self.write_to_logfile(path, buf)
         return len(buf)
 
     def chmod(self, path, mode):
@@ -154,6 +164,26 @@ class HelloFS(Fuse):
             blist.append(str(i))
         return blist
 
+    def set_datablocks(self):
+        for i in range(40, 8232):
+            self.datablocks[i] = ""  #Ideally should read from logfile, no data right now
+
+    def set_inodes(self):
+        start = 40
+        for i in range(0, 1024):
+            end = start + 8
+            for j in range(start, end):
+                self.inodes[i].append(j)
+            start = end
+            
+    
+    def lookup_inode(self, path):
+        return self.inodes[int(path[1:])]
+
+#    def write_to_logfile(self, path, buf):
+        #with open("/home/rubab/Fuse/code/logfile", "r+") as log:
+        #    log.seek()
+        #    log.write() Future parts
 
 def main():
     print("in main")

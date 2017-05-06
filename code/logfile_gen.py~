@@ -1,0 +1,4 @@
+with open("zero", "w") as f:
+    for i in range(0, 40960):
+        f.write(str(i))
+        
