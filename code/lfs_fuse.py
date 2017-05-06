@@ -47,7 +47,6 @@ class HelloFS(Fuse):
         Fuse.__init__(self, *args, **kw)
         self.data = dict()
         self.generate_list(self.block_count())      # Calculating number of blocks
-        print("HelloFS init, {0} , {1}", args, kw)
 
     def getattr(self, path):
         print("getattr being called, path{0}").format(path)
@@ -56,13 +55,11 @@ class HelloFS(Fuse):
             st.st_mode = stat.S_IFDIR | 0755
             st.st_nlink = 2
         elif path[1:] in blist:
-            st.st_mode = stat.S_IFREG | 0444
+            st.st_mode = stat.S_IFREG | 0640   # Giving all permissions
             st.st_nlink = 1
             st.st_size = 1024
         else:
             return -errno.ENOENT
-        print("st:ouput of getattr")
-        print(st)
         return st
 
     def readdir(self, path, offset):
@@ -77,7 +74,7 @@ class HelloFS(Fuse):
         if path[1:] not in blist:
             return -errno.ENOENT
         accmode = os.O_RDONLY | os.O_WRONLY | os.O_RDWR
-        if (flags & accmode) != os.O_RDONLY:  #Catering write?
+        if (((flags & accmode) != os.O_RDONLY) and ((flags & accmode) != os.O_WRONLY)):  #Catering write?
             return -errno.EACCES
 
     def read(self, path, size, offset):
@@ -95,8 +92,52 @@ class HelloFS(Fuse):
     def unlink(self, path):
         print("in unlink")
 
-    def write(self, path):
+    def write(self, path, buf, offset):
         print("in write")
+        print("buf: {0}").format(buf)
+        self.data[int(path[1:])] = buf
+        return len(buf)
+
+    def chmod(self, path, mode):
+        print("in chmod")
+        #self.[path]['st_mode'] &= 0o770000
+        #self.files[path]['st_mode'] |= mode
+        #return 0
+        
+    def chown(self, path, uid, gid):
+        print("in chown")
+        #self.files[path]['st_uid'] = uid
+        #self.files[path]['st_gid'] = gid
+        
+    def create(self, path, mode):
+        print("in create")
+        #self.files[path] = dict(st_mode=(S_IFREG | mode), st_nlink=1,
+        #                        st_size=0, st_ctime=time(), st_mtime=time(),
+        #                        st_atime=time())
+        
+        #self.fd += 1
+        #return self.fd
+
+    def rename(self, old, new):
+        print("in rename")
+        #self.files[new] = self.files.pop(old)
+
+    def rmdir(self, path):
+        print("in rmdir")
+        #self.files.pop(path)
+        #self.files['/']['st_nlink'] -= 1
+
+    def symlink(self, target, source):
+        print("in symlink")
+        #self.files[target] = dict(st_mode=(S_IFLNK | 0o777), st_nlink=1,
+        #                          st_size=len(source))
+
+        #self.data[target] = source
+
+    def truncate(self, path, length, fh=None):
+        print("in truncate")
+        #self.data[path] = self.data[path][:length]
+        #self.files[path]['st_size'] = length
 
     ## Helper Methods
 
