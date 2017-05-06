@@ -14,7 +14,7 @@ except ImportError:
     pass
 import fuse
 from fuse import Fuse
-
+from functools import partial
 
 if not hasattr(fuse, '__version__'):
     raise RuntimeError, \
@@ -24,7 +24,8 @@ fuse.fuse_python_api = (0, 2)
 
 hello_path = '/hello'
 hello_str  = 'Hello World!\n'
-newpath    = '/tmp/mntp'
+file1      = '/1'
+file1_str  = 'Hakooooooooooooooooonaaaaaaaaaaaa Matataaaaaaaaaaaaaaaaaa\n'
 
 class MyStat(fuse.Stat):
     def __init__(self):
@@ -44,9 +45,6 @@ class HelloFS(Fuse):
     def __init__(self, *args, **kw):
         Fuse.__init__(self, *args, **kw)
         print("HelloFS init, {0} , {1}", args, kw)
-        if os.path.exists(newpath):
-            os.removedirs(newpath)
-        os.makedirs(newpath)
 
     def getattr(self, path):
         print("getattr being called, path{0}").format(path)
@@ -58,18 +56,31 @@ class HelloFS(Fuse):
             st.st_mode = stat.S_IFREG | 0444
             st.st_nlink = 1
             st.st_size = len(hello_str)
+        elif path[1:] in ['1', '2', '3', '4']:
+            st.st_mode = stat.S_IFREG | 0444
+            st.st_nlink = 1
+            st.st_size = 1024
         else:
+            print("going to return error")
             return -errno.ENOENT
+        print("st:ouput of getattr")
+        print(st)
         return st
 
     def readdir(self, path, offset):
         print("in readdir")
-        for r in  '.', '..', hello_path[1:]:
+        print("offset: {0}").format(offset)
+        blocks = self.block_count();
+        print(blocks)
+        for r in  '.', '..', '1', '2', '3', '4', hello_path[1:]:
             yield fuse.Direntry(r)
+
+        #for r in range(1, (blocks+1)): 
+        #    yield fuse.Direntry(r)
 
     def open(self, path, flags):
         print("in open")
-        if path != hello_path:
+        if path not in [hello_path, '/1', '/2', '/3', '/4']:
             return -errno.ENOENT
         accmode = os.O_RDONLY | os.O_WRONLY | os.O_RDWR
         if (flags & accmode) != os.O_RDONLY:
@@ -77,7 +88,9 @@ class HelloFS(Fuse):
 
     def read(self, path, size, offset):
         print("in read")
-        if path != hello_path:
+        print("offset: {0}").format(offset)
+        print("size: {0}").format(size)
+        if path not in [hello_path, '/1', '/2', '/3', '/4']:
             return -errno.ENOENT
         slen = len(hello_str)
         if offset < slen:
@@ -89,12 +102,17 @@ class HelloFS(Fuse):
         return buf
 
     def unlink(self, path):
-        rc = os.unlink("/tmp/mnt1"+path)
-        if rc == 0:
-            return 0
-        else:
-            return -1
-          
+        print("in unlink")
+
+    ## Helper Methods
+
+    def block_count(self):
+        count = 0
+        with open("/home/rubab/Fuse/code/logfile") as log:
+            for chunk in iter(lambda: log.read(1024), ''):
+                count += 1  #maybe make a dictionary of this
+        return count
+            
 
 def main():
     print("in main")
