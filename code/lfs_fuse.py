@@ -19,13 +19,14 @@ if not hasattr(fuse, '__version__'):
 
 fuse.fuse_python_api = (0, 2)
 
-blist            = ['.', '..']
-total_inodes     = 1024
-BLOCK_SIZE         = 1024
-datablock_start_addr   = 40960
-INODE_SIZE = 40
-INODE_TABLE_OFFSET = 0
-INODE0_OFFSET = 40 * 1024
+blist                  = ['.', '..']
+total_inodes           = 1024
+BLOCK_SIZE             = 1024
+INODE_SIZE             = 40
+INODE_TABLE_OFFSET     = 0
+INODE0_OFFSET          = 40 * BLOCK_SIZE
+DATABLOCK_OFFSET       = INODE0_OFFSET + 8 * BLOCK_SIZE
+ZERO_OFFSET            = 1 * BLOCK_SIZE
 
 class MyStat(fuse.Stat):
     def __init__(self):
@@ -47,7 +48,7 @@ class HelloFS(Fuse):
         self.datablocks   = {}                # { 41 : "This is the content in block 41!" }
         self.inode_table  = defaultdict(list)  # { 0 : [41, 21, 213 , 53, 32, 111, 219, 2] }
         self.inode0       = {}
-        self.free_count   = 0
+        self.free_count   = 1
         self.read_inode_table()
         self.read_inode0()
         self.read_datablocks()
@@ -89,7 +90,7 @@ class HelloFS(Fuse):
 
     def read(self, path, size, offset):
         print("in read")
-        
+        count = 1
         buf = ""
         if path[1:] not in self.inode0:
             return -errno.ENOENT
@@ -97,10 +98,11 @@ class HelloFS(Fuse):
         ino = self.lookup_inode0(path[1:])
         blk_list = self.lookup_datablocks(ino)
         print("in read inode: {0}, blk_list: {1}".format(ino, blk_list))
+        print("in read datablocks: {0}".format(self.datablocks))
         for block in blk_list:
             if block == "0000":                       # don't need this
                 continue                              # modify for reshow of data, check datablock content
-            buf = buf + self.datablocks[block]        # just combine and show. combining the data of all the eight blocks   ?? wrong
+            buf = buf + self.datablocks[int(block)]         # just combine and show. combining the data of all the eight blocks   ?? wrong
             
         return buf
 
@@ -109,11 +111,12 @@ class HelloFS(Fuse):
 
     def write(self, path, buf, offset):
         print("in write")
-        
+        print("write offset {0}, buf: {1}".format(offset, buf))
+    
         ino = self.lookup_inode0(path[1:])
         blk_list = self.lookup_datablocks(ino)
         print("in write blk list: {0}".format(blk_list))
-        new_blk_list = self.update_datablocks(buf, blk_list)
+        new_blk_list = self.update_datablocks(buf, blk_list, offset)
         print("new blk list: {0}".format(new_blk_list))
         if new_blk_list:
             self.update_inode_table(ino, new_blk_list)
@@ -170,11 +173,16 @@ class HelloFS(Fuse):
         return self.inode_table[int(path[1:])]
 
     def read_inode0(self):
+        count = 0
         with open("/home/rubab/Fuse/code/logfilev2") as log:
             log.seek(40 * BLOCK_SIZE + INODE_TABLE_OFFSET)
-            for line in log:
+            while 1:
+                if count > 1023:
+                    break
+                count = count + 1
+                line = log.readline()
                 filename, ino = (line.strip()).split(" ")
-                self.inode0[filename] = ino
+                self.inode0[filename] = ino    
 
     def update_inode0(self, inode0, filename, ino):
         for k, v in self.inode0.items():
@@ -207,7 +215,10 @@ class HelloFS(Fuse):
     def update_inode_table(self, ino, blk_list):
         count = 0
         start = 4
-        self.inode_table[int(ino)] = self.inode_table[int(ino)] + blk_list
+        #keep the list len to 8
+        
+        self.inode_table[int(ino)] = blk_list + self.inode_table[int(ino)]
+        self.inode_table[int(ino)] = self.inode_table[int(ino)][:8]
         print("updated inode table: {0}".format(self.inode_table[int(ino)]))
         with open("/home/rubab/Fuse/code/logfilev2", "rb+") as log:
             log.seek(int(ino) * INODE_SIZE + INODE_TABLE_OFFSET)
@@ -216,15 +227,20 @@ class HelloFS(Fuse):
                 log.write(str(blk).zfill(4))
     
     def read_datablocks(self):  #save size too
-        count = 0
-        with open("/home/rubab/Fuse/code/logfile") as log:
-            log.seek(INODE0_OFFSET + 8 * BLOCK_SIZE)        #Data blocks start from here
+        count = 1
+        with open("/home/rubab/Fuse/code/logfilev2") as log:
+            log.seek(DATABLOCK_OFFSET + ZERO_OFFSET)        #Data blocks start from here
+            print "in readblock loop before {0}".format(log.tell())
             for chunk in iter(lambda: log.read(1024), ''):
-                self.datablocks[count] = chunk      #creating a dictionary of filename/filenumber and corresponding content              
-                count += 1  
+                print "in readblock loop"
+                self.datablocks[count] = chunk               #creating a dictionary of filename/filenumber and corresponding content 
+                count += 1
+            print self.datablocks
         return self.datablocks
         
-    def update_datablocks(self, buf, blk_list):  #in DS as well as file
+    def update_datablocks(self, buf, blk_list, offset):  #in DS as well as file
+        if offset > 0:
+            buf = buf + self.datablocks[int(blk_list[0])]
         data_size = len(buf)
         chunks    = int(math.ceil(float(data_size)/float(BLOCK_SIZE)))
         new_blk_list = []
@@ -235,15 +251,27 @@ class HelloFS(Fuse):
                 blk = self.allocate_block() # it means first time allocation
                 new_blk_list.append(blk)
 
-            self.datablocks[int(blk)] = buf[offset:offset+1023]
+            self.datablocks[int(blk)] = buf[offset:offset+1023]  
+
+        with open("/home/rubab/Fuse/code/logfilev2", "rb+") as log:
+            for blk in new_blk_list:
+                log.seek(DATABLOCK_OFFSET + blk * BLOCK_SIZE)
+                log.write(self.datablocks[int(blk)])
+
+        print("in update datablocks buf : {0}".format(buf))
+        print("in update datablocks : {0}".format(self.datablocks))
         print("new blk list in update: {0}".format(new_blk_list))
         return new_blk_list
 
     def allocate_block(self): # find next free, in log would be sequential so don't have to find
+        #self.datablocks[self.free_count] = ""
+        #self.free_count += 1
+        #return self.free_count
         while 1:
+            print "in while"
             if self.free_count not in self.datablocks:
                 break
-            self.free_count += self.free_count
+            self.free_count += 1
         return self.free_count
 
     def lookup_inode0(self, filename):
