@@ -52,12 +52,6 @@ class HelloFS(Fuse):
         self.read_inode_table()
         self.read_inode0()
         self.read_datablocks()
-       # print("inode_table: {0}".format(self.inode_table))
-       # print("inode0: {0}".format(self.inode0))
-       # print("datablocks: {0}".format(self.datablocks))
-        #self.set_datablocks()
-        #self.set_inodes()
-        #self.generate_list(total_inodes)      # Total number of blocks
 
     def getattr(self, path):
         print("getattr being called, path{0}").format(path)
@@ -124,7 +118,9 @@ class HelloFS(Fuse):
         #print("inode table: {0}, datablock: {1}", self.inode_table, self.datablocks)
         return len(buf)
 
-    def rename(self):
+    def rename(self, old_name, new_name):
+        ino = self.lookup_inode0(old_name[1:])
+        self.update_inode0(new_name[1:], ino)
         print("in rename")
 
     def rmdir(self, path):
@@ -184,16 +180,17 @@ class HelloFS(Fuse):
                 filename, ino = (line.strip()).split(" ")
                 self.inode0[filename] = ino    
 
-    def update_inode0(self, inode0, filename, ino):
+    def update_inode0(self, filename, inode):
         for k, v in self.inode0.items():
             if str(inode) == str(v):
-                self.inode0.pop(k)
+                old = self.inode0.pop(k)
                 self.inode0[filename] = str(v)
                 break
-
-        with open("/home/rubab/Fuse/code/logfilev2") as log:
-            log.seek(40 * BLOCK_SIZE + INODE_TABLE_OFFSET)
-            for k, v in self.inode0.items:
+        print "inode0 after update: {0}".format(self.inode0[filename])
+       
+        with open("/home/rubab/Fuse/code/logfilev2", "rb+") as log:
+            log.seek(INODE0_OFFSET + INODE_TABLE_OFFSET)
+            for k, v in self.inode0.items():
                 log.write("{0} {1}\n".format(str(k), str(v)))
 
     def read_inode_table(self):    # have to fetch list of allocated datablocks and inode 0                                                    
