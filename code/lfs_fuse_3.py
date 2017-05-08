@@ -27,7 +27,6 @@ INODE_TABLE_OFFSET     = 0
 INODE0_OFFSET          = 40 * BLOCK_SIZE
 DATABLOCK_OFFSET       = INODE0_OFFSET + 8 * BLOCK_SIZE
 ZERO_OFFSET            = 1 * BLOCK_SIZE
-default_blk_list = ["0000", "0000", "0000", "0000", "0000", "0000", "0000", "0000"]
 
 class MyStat(fuse.Stat):
     def __init__(self):
@@ -110,9 +109,8 @@ class HelloFS(Fuse):
         print("write offset {0}, buf: {1}".format(offset, buf))
     
         ino = self.lookup_inode0(path[1:])
-        #blk_list = self.lookup_datablocks(ino)
-        #print("in write blk list: {0}".format(blk_list))
-        blk_list = ["0000", "0000", "0000", "0000", "0000", "0000", "0000", "0000"]
+        blk_list = self.lookup_datablocks(ino)
+        print("in write blk list: {0}".format(blk_list))
         new_blk_list = self.update_datablocks(buf, blk_list, offset)
         print("new blk list: {0}".format(new_blk_list))
         if new_blk_list:
@@ -126,6 +124,10 @@ class HelloFS(Fuse):
         self.update_inode0(new_name[1:], ino)
         print("in rename")
 
+    def rmdir(self, path):
+        print("in rmdir")
+        #self.files.pop(path)                                                                                                                   
+        #self.files['/']['st_nlink'] -= 1                                                                                                       
 
     def symlink(self, target, source):
         print("in symlink")
@@ -213,7 +215,7 @@ class HelloFS(Fuse):
         start = 4
         #keep the list len to 8
         
-        self.inode_table[int(ino)] = blk_list + default_blk_list
+        self.inode_table[int(ino)] = blk_list + self.inode_table[int(ino)]
         self.inode_table[int(ino)] = self.inode_table[int(ino)][:8]
         print("updated inode table: {0}".format(self.inode_table[int(ino)]))
         with open("/home/rubab/Fuse/code/logfilev2", "rb+") as log:
