@@ -1,0 +1,71 @@
+from collections import defaultdict
+
+INODE_SIZE = 40
+INODE_TABLE_START_ADDR = 0
+
+def read_inode_table():    # have to fetch list of allocated datablocks and inode 0                                                     
+    count = 0
+    start = 4
+    inode_table = defaultdict(list)
+    with open("/home/rubab/Fuse/code/logfilev2") as log:
+        for chunk in iter(lambda: log.read(40), ''):
+            start = 4
+            print("chunk: {0}").format(chunk)
+            for j in range(0, 8):
+                end = start + 4
+                blk = chunk[start:end]
+                inode_table[count].append(blk)
+                start = end
+            count += 1
+        
+
+#update only when new allocation
+#rewrite in case of lfs
+def update_inode_table(ino, blk_list):    # have to fetch list of allocated datablocks and inode 0                                                     
+    count = 0
+    start = 4
+    inode_table = defaultdict(list)
+    with open("/home/rubab/Fuse/code/logfilev2", "rb+") as log:
+        log.seek(ino * INODE_SIZE + INODE_TABLE_START_ADDR)
+        log.seek(4, 1)
+        for blk in blk_list:
+            log.write(str(blk).zfill(4))
+
+def block_count():
+    count = 0
+    with open("/home/rubab/Fuse/code/logfilev2") as log:
+        for i in iter(lambda: log.read(1024), ''):
+            count += 1
+    print("blk count {0}".format(count))
+
+def read_inode0():
+    inode0 = {}
+    with open("/home/rubab/Fuse/code/logfilev2") as log:
+        log.seek(40 * 1024 + 0)
+        for line in log:
+            filename, ino = (line.strip()).split(" ")
+            inode0[filename] = ino
+    print(inode0)
+    return inode0
+
+def update_inode0(inode0, filename, inode):
+    
+#    with open("/home/rubab/Fuse/code/logfilev2", "rb+") as log:
+#        log.seek(40 * 1024 + 0)
+#        for line in log:
+#            print(len(line))
+            #f, ino = (line.strip()).split(" ")
+    for k, v in inode0.items():
+        if str(inode) == str(v):
+             #   log.seek(log.tell()-len(line), 1)
+              #  log.write("{0} {1}\n".format(filename, str(ino)))
+            inode0.pop(k)
+            inode0[filename] = str(v)
+            break
+    print(inode0[filename])
+    print(inode0[k])
+
+update_inode0(read_inode0(), "hello", 3)
+block_count()
+#read_inode_table()
+#update_inode_table(3, [214, 16, 34])

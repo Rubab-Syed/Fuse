@@ -1,7 +1,13 @@
 #!/usr/bin/env python
 
-import os, stat, errno
+#    Copyright (C) 2006  Andrew Straw  <strawman@astraw.com>
+#
+#    This program can be distributed under the terms of the GNU LGPL.
+#    See the file COPYING.
+#
 
+import os, stat, errno
+# pull in some spaghetti to make this stuff work without fuse-py being installed
 try:
     import _find_fuse_parts
 except ImportError:
@@ -21,10 +27,7 @@ fuse.fuse_python_api = (0, 2)
 
 blist            = ['.', '..']
 total_inodes     = 1024
-BLOCK_SIZE         = 1024
-datablock_start_addr   = 40960
-INODE_SIZE = 40
-INODE_TABLE_OFFSET = 0
+blk_size         = 1024
 
 class MyStat(fuse.Stat):
     def __init__(self):
@@ -43,12 +46,12 @@ class HelloFS(Fuse):
 
     def __init__(self, *args, **kw):
         Fuse.__init__(self, *args, **kw)
-        self.datablocks   = {}                # { 41 : "This is the content in block 41!" }
-        self.inode_table  = defaultdict(list)  # { 0 : [41, 21, 213 , 53, 32, 111, 219, 2] }
-        self.inode0       = {}
+        self.datablocks   = {}
+        self.inodes = defaultdict(list)
         self.set_datablocks()
         self.set_inodes()
-        self.generate_list(total_inodes)      # Total number of blocks
+#        self.generate_list(self.block_count())      # Calculating number of blocks
+        self.generate_list(total_inodes)      # Calculating number of blocks
 
     def getattr(self, path):
         print("getattr being called, path{0}").format(path)
@@ -57,9 +60,9 @@ class HelloFS(Fuse):
             st.st_mode = stat.S_IFDIR | 0755
             st.st_nlink = 2
         elif path[1:] in blist:
-            st.st_mode = stat.S_IFREG | 0755   # Giving all permissions
+            st.st_mode = stat.S_IFREG | 0640   # Giving all permissions
             st.st_nlink = 1
-            st.st_size = 8096                  # pros and cons?
+            st.st_size = 1024
         else:
             return -errno.ENOENT
         return st
@@ -81,17 +84,16 @@ class HelloFS(Fuse):
 
     def read(self, path, size, offset):
         print("in read")
-        
-        buf = ""
+        print("offset: {0}").format(offset)
+        print("size: {0}").format(size)
+        buf = ''
         if path[1:] not in blist:
             return -errno.ENOENT
                 
         blk_list = self.lookup_inode(path)
-        
         for block in blk_list:
-            if self.datablocks[block] == '':
-                break
-            buf = buf + self.datablocks[block]        #combining the data of all the eight blocks   ?? wrong
+            buf += self.datablocks[block]        #combining the data of all the eight blocks   ?? wrong
+            print("buf in read: {0}").format(buf)
             
         return buf
 
@@ -100,20 +102,58 @@ class HelloFS(Fuse):
 
     def write(self, path, buf, offset):
         print("in write")
-        
+        print("buf: {0}").format(buf)
         data_size = len(buf)
-        
-        chunks    = int(math.ceil(float(data_size)/float(blk_size)))
+        chunks    = math.ceil(data_size/blk_size)
         
         blk_list = self.lookup_inode(path)
-        
-        for i in range(0, chunks):
+        for i in range(0, int(chunks)):
             offset = i*1024
             self.datablocks[blk_list[i]] = buf[offset:offset+1023]
-        #flush buffer truncate
-        print(self.datablocks[blk_list[0]])
-        print(self.datablocks[blk_list[1]])
+        #self.datablocks[int(path[1:])] = buf
+        #self.write_to_logfile(path, buf)
         return len(buf)
+
+    def chmod(self, path, mode):
+        print("in chmod")
+        #self.[path]['st_mode'] &= 0o770000
+        #self.files[path]['st_mode'] |= mode
+        #return 0
+        
+    def chown(self, path, uid, gid):
+        print("in chown")
+        #self.files[path]['st_uid'] = uid
+        #self.files[path]['st_gid'] = gid
+        
+    def create(self, path, mode):
+        print("in create")
+        #self.files[path] = dict(st_mode=(S_IFREG | mode), st_nlink=1,
+        #                        st_size=0, st_ctime=time(), st_mtime=time(),
+        #                        st_atime=time())
+        
+        #self.fd += 1
+        #return self.fd
+
+    def rename(self, old, new):
+        print("in rename")
+        #self.files[new] = self.files.pop(old)
+
+    def rmdir(self, path):
+        print("in rmdir")
+        #self.files.pop(path)
+        #self.files['/']['st_nlink'] -= 1
+
+    def symlink(self, target, source):
+        print("in symlink")
+        #self.files[target] = dict(st_mode=(S_IFLNK | 0o777), st_nlink=1,
+        #                          st_size=len(source))
+
+        #self.data[target] = source
+
+    def truncate(self, path, length, fh=None):
+        print("in truncate")
+        #self.data[path] = self.data[path][:length]
+        #self.files[path]['st_size'] = length
 
     ## Helper Methods
 
@@ -142,63 +182,9 @@ class HelloFS(Fuse):
                 self.inodes[i].append(j)
             start = end
             
+    
     def lookup_inode(self, path):
-        return self.inode_table[int(path[1:])]
-
-    def read_inode0(self):
-        with open("/home/rubab/Fuse/code/logfilev2") as log:
-            log.seek(40 * BLOCK_SIZE + INODE_TABLE_OFFSET)
-            for line in log:
-                filename, ino = (line.strip()).split(" ")
-                self.inode0[filename] = ino
-
-    def update_inode0(self, inode0, filename, ino):
-        for k, v in self.inode0.items():
-            if str(inode) == str(v):
-                self.inode0.pop(k)
-                self.inode0[filename] = str(v)
-                break
-
-    def read_inode_table(self):    # have to fetch list of allocated datablocks and inode 0                                                    
-        count = 0
-        start = 4
-        with open("/home/rubab/Fuse/code/logfilev2") as log:
-            for chunk in iter(lambda: log.read(40), ''):
-                start = 4
-                print("chunk: {0}").format(chunk)
-                for j in range(0, 8):
-                    end = start + 4
-                    blk = chunk[start:end]
-                    self.inode_table[count].append(blk)
-                    start = end
-                count += 1
-
-    def read_datablocks(self):  #save size too
-
-        
-    #update only when new allocation                                                                                                           
-    #rewrite in case of lfs                                                                                                                
-    def update_inode_table(self, ino, blk_list):
-        count = 0
-        start = 4
-        self.inode_table[int(ino)] = self.inode_table[int(ino)] + blk_list
-        with open("/home/rubab/Fuse/code/logfilev2", "rb+") as log:
-            log.seek(ino * INODE_SIZE + INODE_TABLE_START_ADDR)
-            log.seek(4, 1)
-            for blk in self.inode_table[int(ino)]:
-                log.write(str(blk).zfill(4))
-            
-    def update_datablocks(self):
-
-    def lookup_inode0(self):
-
-    def write_to_logfile(self):
-
-    def datablock_bitmap(self):
-        #array of 1024 - 40 indices
-
-    def allocate_block(self): # find next free, in log would be sequential so don't have to find
-
+        return self.inodes[int(path[1:])]
 
 #    def write_to_logfile(self, path, buf):
         #with open("/home/rubab/Fuse/code/logfile", "r+") as log:
