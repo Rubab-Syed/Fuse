@@ -47,6 +47,7 @@ class HelloFS(Fuse):
         self.datablocks   = {}                # { 41 : "This is the content in block 41!" }
         self.inode_table  = defaultdict(list)  # { 0 : [41, 21, 213 , 53, 32, 111, 219, 2] }
         self.inode0       = {}
+        self.free_count   = 0
         self.read_inode_table()
         self.read_inode0()
         self.read_datablocks()
@@ -80,6 +81,7 @@ class HelloFS(Fuse):
     def open(self, path, flags):
         print("in open")
         if path[1:] not in self.inode0:
+            print "sth wrong"
             return -errno.ENOENT
         accmode = os.O_RDONLY | os.O_WRONLY | os.O_RDWR
         if (((flags & accmode) != os.O_RDONLY) and ((flags & accmode) != os.O_WRONLY)):  #Catering write?
@@ -94,9 +96,9 @@ class HelloFS(Fuse):
         
         ino = self.lookup_inode0(path[1:])
         blk_list = self.lookup_datablocks(ino)
-        
+        print("in read inode: {0}, blk_list: {1}".format(ino, blk_list))
         for block in blk_list:
-            if block == "0000":
+            if block == "0000":                       # don't need this
                 continue                              # modify for reshow of data, check datablock content
             buf = buf + self.datablocks[block]        # just combine and show. combining the data of all the eight blocks   ?? wrong
             
@@ -108,20 +110,35 @@ class HelloFS(Fuse):
     def write(self, path, buf, offset):
         print("in write")
         
-        data_size = len(buf)
-        
-        chunks    = int(math.ceil(float(data_size)/float(blk_size)))
-        
-        blk_list = self.lookup_inode(path)
-        
-        for i in range(0, chunks):
-            offset = i*1024
-            self.datablocks[blk_list[i]] = buf[offset:offset+1023]
-        #flush buffer truncate
-        print(self.datablocks[blk_list[0]])
-        print(self.datablocks[blk_list[1]])
+        ino = self.lookup_inode0(path[1:])
+        blk_list = self.lookup_datablocks(ino)
+        print("in write blk list: {0}".format(blk_list))
+        new_blk_list = self.update_datablocks(buf, blk_list)
+        print("new blk list: {0}".format(new_blk_list))
+        if new_blk_list:
+            self.update_inode_table(ino, new_blk_list)
+            
+        #print("inode table: {0}, datablock: {1}", self.inode_table, self.datablocks)
         return len(buf)
 
+    def rename(self):
+        print("in rename")
+
+    def rmdir(self, path):
+        print("in rmdir")
+        #self.files.pop(path)                                                                                                                   
+        #self.files['/']['st_nlink'] -= 1                                                                                                       
+
+    def symlink(self, target, source):
+        print("in symlink")
+        #self.files[target] = dict(st_mode=(S_IFLNK | 0o777), st_nlink=1,                                                                      
+        #                          st_size=len(source))                                                                                        
+        #self.data[target] = source                                                                                                             
+
+    def truncate(self, path, length, fh=None):
+        print("in truncate")
+        #self.data[path] = self.data[path][:length]                                                                                             
+        #self.files[path]['st_size'] = length
     ## Helper Methods
 
     def block_count(self):
@@ -191,8 +208,9 @@ class HelloFS(Fuse):
         count = 0
         start = 4
         self.inode_table[int(ino)] = self.inode_table[int(ino)] + blk_list
+        print("updated inode table: {0}".format(self.inode_table[int(ino)]))
         with open("/home/rubab/Fuse/code/logfilev2", "rb+") as log:
-            log.seek(ino * INODE_SIZE + INODE_TABLE_START_ADDR)
+            log.seek(int(ino) * INODE_SIZE + INODE_TABLE_OFFSET)
             log.seek(4, 1)
             for blk in self.inode_table[int(ino)]:
                 log.write(str(blk).zfill(4))
@@ -208,33 +226,31 @@ class HelloFS(Fuse):
         
     def update_datablocks(self, buf, blk_list):  #in DS as well as file
         data_size = len(buf)
-        chunks    = int(math.ceil(float(data_size)/float(blk_size)))
-        
-        for i in range(0, chunks):
+        chunks    = int(math.ceil(float(data_size)/float(BLOCK_SIZE)))
+        new_blk_list = []
+        for i in range(0, chunks):    # overwrite all data
             offset = i*1024
             blk = blk_list[i]
-            if blk == "0000":         # it means first time allocation
-                blk = allocate_block();
-                
-            self.datablocks[int(blk)] = buf[offset:offset+1023]
-        #have to update inode table too
-            
-            
-    #def lookup_inode0(self):
+            if blk == "0000":
+                blk = self.allocate_block() # it means first time allocation
+                new_blk_list.append(blk)
 
-    #def datablock_bitmap(self):
-        #array of 1024 - 40 indices
+            self.datablocks[int(blk)] = buf[offset:offset+1023]
+        print("new blk list in update: {0}".format(new_blk_list))
+        return new_blk_list
 
     def allocate_block(self): # find next free, in log would be sequential so don't have to find
-        for blk, data in self.datablocks.items():
-            if len(data) == 0:
-                return blk
+        while 1:
+            if self.free_count not in self.datablocks:
+                break
+            self.free_count += self.free_count
+        return self.free_count
 
     def lookup_inode0(self, filename):
         return self.inode0[filename]
 
     def lookup_datablocks(self, ino):
-        return self.inode_table[ino]
+        return self.inode_table[int(ino)]
 
 def main():
     print("in main")
